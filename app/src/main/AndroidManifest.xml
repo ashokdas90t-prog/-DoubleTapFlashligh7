@@ -12,7 +12,7 @@
         android:label="Double Tap Flashlight">
 
         <activity
-            android:name=".MainActivity"
+            android:name="com.example.flashlight.MainActivity""
             android:exported="true">
 
             <intent-filter>
@@ -22,7 +22,7 @@
 
         </activity>
         <service
-    android:name=".TapService"
+    android:name="com.example.flashlight.TapService""
     android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
     android:exported="true">
 
