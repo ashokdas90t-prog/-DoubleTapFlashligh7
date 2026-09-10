@@ -1,4 +1,4 @@
-package com.example.flashlight;
+package com.example.doubletapflashlight;
 
 import android.app.*;
 import android.content.*;
