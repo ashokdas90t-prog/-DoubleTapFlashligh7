@@ -11,4 +11,4 @@
 
     android:canRequestTouchExplorationMode="true"
 
-    android:description="@string/app_name" />
+    android:description="Double Tap Flashlight" />
