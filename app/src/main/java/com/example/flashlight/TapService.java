@@ -1,48 +1,54 @@
 package com.example.doubletapflashlight;
-
-import android.app.*;
-import android.content.*;
+import android.view.View;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
 import android.graphics.PixelFormat;
-import android.hardware.camera2.*;
-import android.os.*;
+import android.hardware.camera2.CameraManager;
+import android.os.Build;
+import android.os.IBinder;
 import android.provider.Settings;
-import android.view.*;
-import java.util.*;
+import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.WindowManager;
 
 public class TapService extends Service {
-    WindowManager wm;
-    View overlay;
-    long last = 0;
-    boolean torch = false;
-    String camId;
 
+    private WindowManager windowManager;
+    private View overlay;
+    private CameraManager cameraManager;
+    private String cameraId;
+    private boolean torchOn = false;
+    private long lastTapTime = 0;
+
+    @Override
     public void onCreate() {
         super.onCreate();
-        createChannel();
 
-        startForeground(7, new Notification.Builder(this, "tapflash")
-                .setContentTitle("Double Tap Flashlight")
-                .setContentText("Double tap gesture service is running")
-                .setSmallIcon(android.R.drawable.ic_menu_camera)
-                .build());
+        createNotificationChannel();
 
-        CameraManager cm = (CameraManager) getSystemService(CAMERA_SERVICE);
+        Notification notification =
+                new Notification.Builder(this, "tapflash")
+                        .setContentTitle("Double Tap Flashlight")
+                        .setContentText("Double tap service is running")
+                        .setSmallIcon(android.R.drawable.ic_menu_camera)
+                        .build();
+
+        startForeground(7, notification);
+
+        cameraManager =
+                (CameraManager) getSystemService(Context.CAMERA_SERVICE);
 
         try {
-            for (String id : cm.getCameraIdList()) {
-                CameraCharacteristics c =
-                        cm.getCameraCharacteristics(id);
-
-                Boolean f = c.get(
-                        CameraCharacteristics.FLASH_INFO_AVAILABLE
-                );
-
-                if (Boolean.TRUE.equals(f)) {
-                    camId = id;
-                    break;
-                }
+            for (String id : cameraManager.getCameraIdList()) {
+                cameraId = id;
+                break;
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         if (Build.VERSION.SDK_INT >= 23 &&
                 Settings.canDrawOverlays(this)) {
@@ -50,21 +56,23 @@ public class TapService extends Service {
         }
     }
 
-    void addOverlay() {
-        wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+    private void addOverlay() {
+        windowManager =
+                (WindowManager) getSystemService(WINDOW_SERVICE);
 
         overlay = new View(this) {
-            public boolean onTouchEvent(
-                    android.view.MotionEvent e) {
+            @Override
+            public boolean onTouchEvent(MotionEvent event) {
 
-                if (e.getAction() == MotionEvent.ACTION_UP) {
+                if (event.getAction() == MotionEvent.ACTION_UP) {
+
                     long now = System.currentTimeMillis();
 
-                    if (now - last < 450) {
+                    if (now - lastTapTime < 400) {
                         toggleTorch();
-                        last = 0;
+                        lastTapTime = 0;
                     } else {
-                        last = now;
+                        lastTapTime = now;
                     }
                 }
 
@@ -74,73 +82,81 @@ public class TapService extends Service {
 
         int type;
 
-        if (Build.VERSION.SDK_INT >= 26)
+        if (Build.VERSION.SDK_INT >= 26) {
             type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-        else
+        } else {
             type = WindowManager.LayoutParams.TYPE_PHONE;
+        }
 
-        WindowManager.LayoutParams p =
+        WindowManager.LayoutParams params =
                 new WindowManager.LayoutParams(
-                        1,
-                        1,
+                        80,
+                        80,
                         type,
-                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                         PixelFormat.TRANSLUCENT
                 );
 
-        p.gravity = Gravity.TOP | Gravity.LEFT;
+        params.gravity = Gravity.TOP | Gravity.LEFT;
 
         try {
-            wm.addView(overlay, p);
-        } catch (Exception ignored) {}
-    }
-
-    void toggleTorch() {
-        if (camId == null) return;
-
-        try {
-            CameraManager cm =
-                    (CameraManager) getSystemService(CAMERA_SERVICE);
-
-            torch = !torch;
-            cm.setTorchMode(camId, torch);
-
-        } catch (Exception e) {
-            torch = !torch;
+            windowManager.addView(overlay, params);
+        } catch (Exception ignored) {
         }
     }
 
-    void createChannel() {
+    private void toggleTorch() {
+
+        if (cameraId == null || cameraManager == null) {
+            return;
+        }
+
+        try {
+            torchOn = !torchOn;
+            cameraManager.setTorchMode(cameraId, torchOn);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void createNotificationChannel() {
+
         if (Build.VERSION.SDK_INT >= 26) {
 
-            NotificationChannel ch =
+            NotificationChannel channel =
                     new NotificationChannel(
                             "tapflash",
                             "Double Tap Flashlight",
                             NotificationManager.IMPORTANCE_LOW
                     );
 
-            ((NotificationManager)
-                    getSystemService(NOTIFICATION_SERVICE))
-                    .createNotificationChannel(ch);
+            NotificationManager manager =
+                    (NotificationManager)
+                            getSystemService(NOTIFICATION_SERVICE);
+
+            manager.createNotificationChannel(channel);
         }
     }
 
-    public int onStartCommand(Intent i, int f, int id) {
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
         return START_STICKY;
     }
 
+    @Override
     public void onDestroy() {
-        if (wm != null && overlay != null)
+
+        if (windowManager != null && overlay != null) {
             try {
-                wm.removeView(overlay);
-            } catch (Exception ignored) {}
+                windowManager.removeView(overlay);
+            } catch (Exception ignored) {
+            }
+        }
 
         super.onDestroy();
     }
 
-    public android.os.IBinder onBind(Intent i) {
+    @Override
+    public IBinder onBind(Intent intent) {
         return null;
     }
 }
